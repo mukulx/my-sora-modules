@@ -6,7 +6,8 @@ const BASE_URL = "https://anineko.to";
 async function searchResults(keyword) {
     try {
         const encodedKeyword = encodeURIComponent(keyword);
-        const html = await fetch(`${BASE_URL}/search?keyword=${encodedKeyword}`);
+        const response = await fetch(`${BASE_URL}/search?keyword=${encodedKeyword}`);
+        const html = await response.text();
 
         const results = [];
 
@@ -60,7 +61,8 @@ async function searchResults(keyword) {
 // ─────────────────────────────────────────────
 async function extractDetails(url) {
     try {
-        const html = await fetch(url);
+        const response = await fetch(url);
+        const html = await response.text();
 
         // Description — try multiple selectors
         let description = "";
@@ -95,7 +97,8 @@ async function extractDetails(url) {
 // ─────────────────────────────────────────────
 async function extractEpisodes(url) {
     try {
-        const html = await fetch(url);
+        const response = await fetch(url);
+        const html = await response.text();
 
         // Match all episode links: /watch/slug/ep-N
         const epRegex = /href="(\/watch\/[^"]+\/ep-(\d+))"/g;
@@ -127,7 +130,8 @@ async function extractEpisodes(url) {
 // ─────────────────────────────────────────────
 async function extractStreamUrl(url) {
     try {
-        const html = await fetch(url);
+        const response = await fetch(url);
+        const html = await response.text();
 
         // Priority 1: direct m3u8 stream in a script variable
         const m3u8Match =
@@ -162,7 +166,8 @@ async function extractStreamUrl(url) {
             for (const apiUrl of apiAttempts) {
                 try {
                     const apiRes = await fetch(apiUrl);
-                    const apiM3u8 = apiRes.match(/(https?:\/\/[^"'\s]+\.m3u8[^"'\s]*)/);
+                    const apiHtml = await apiRes.text();
+                    const apiM3u8 = apiHtml.match(/(https?:\/\/[^"'\s]+\.m3u8[^"'\s]*)/);
                     if (apiM3u8) return apiM3u8[1];
                 } catch (_) {}
             }

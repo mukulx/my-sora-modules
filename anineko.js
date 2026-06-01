@@ -1,98 +1,112 @@
 const BASE_URL = "https://anineko.to";
 
 // ─────────────────────────────────────────────
-// 1. SEARCH RESULTS 
+// 1. SEARCH RESULTS (ROBUST PATTERN MATCHING)
 // ─────────────────────────────────────────────
 async function searchResults(keyword) {
     try {
-        const encodedKeyword = encodeURIComponent(keyword);
+        const cleanKeyword = keyword.trim();
+        const encodedKeyword = encodeURIComponent(cleanKeyword);
         
-        // Test all possible search endpoints
+        // Comprehensive list of alternative routing structures for modern anime frameworks
         const searchPaths = [
-            `/search?keyword=${encodedKeyword}`, 
-            `/filter?keyword=${encodedKeyword}`, 
-            `/search.html?keyword=${encodedKeyword}`,
+            `/search?keyword=${encodedKeyword}`,
+            `/search/?keyword=${encodedKeyword}`,
+            `/search?key=${encodedKeyword}`,
+            `/search?q=${encodedKeyword}`,
+            `/filter?keyword=${encodedKeyword}`,
+            `/filter/?keyword=${encodedKeyword}`,
+            `/search-anime?keyword=${encodedKeyword}`,
             `/?s=${encodedKeyword}`
         ];
 
-        let debugHtml = "";
+        let html = "";
+        let finalResults = [];
 
         for (const path of searchPaths) {
             try {
                 const response = await fetch(BASE_URL + path);
                 if (!response.ok) continue;
                 
-                const html = await response.text();
-                if (!debugHtml) debugHtml = html; // Store first valid response for debugging
+                const tempHtml = await response.text();
                 
-                const results = [];
+                // Skip explicit error pages immediately
+                if (tempHtml.includes("Page Not Found") || tempHtml.includes("404 Error")) {
+                    continue;
+                }
 
-                // Method 1: Relaxed Card Regex (ignores strict CDN requirements)
-                const cardRegex = /<div[^>]*class="[^"]*flw-item[^"]*"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/gi;
-                const cards = html.match(cardRegex) || [];
+                const localResults = [];
+                
+                // Non-rigid card scanning: extracts data blocks from the start of an item up to its title closing tag
+                const blockRegex = /<div[^>]*class="[^"]*flw-item[^"]*"[\s\S]*?<\/h3>/gi;
+                const blocks = tempHtml.match(blockRegex) || [];
 
-                for (const card of cards) {
-                    const hrefMatch = card.match(/href="(\/watch\/[^"?]+)"[^>]*>([^<]+)<\/a>/);
-                    const imgMatch = card.match(/data-src="([^"]+)"/) || card.match(/src="([^"]+)"/);
+                for (const block of blocks) {
+                    const hrefMatch = block.match(/href="(\/watch\/[^"?#\s>]+)"/i);
+                    const titleMatch = block.match(/title="([^"]+)"/i) || block.match(/<a[^>]*>([^<]+)<\/a>/i);
+                    const imgMatch = block.match(/(?:data-src|src)="([^"]+)"/i);
 
-                    if (hrefMatch) {
-                        results.push({
-                            title: hrefMatch[2].trim(),
+                    if (hrefMatch && titleMatch) {
+                        localResults.push({
+                            title: titleMatch[1].trim(),
                             image: imgMatch ? imgMatch[1] : "",
                             href: BASE_URL + hrefMatch[1]
                         });
                     }
                 }
 
-                // Method 2: Fallback broad link scraping if cards fail
-                if (results.length === 0) {
-                    const linkRegex = /<a[^>]+href="(\/watch\/[^"?]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+                // Broad Fallback Scraper: parses any valid media anchors if custom structural grid classes are absent
+                if (localResults.length === 0) {
+                    const fallbackRegex = /<a[^>]+href="(\/watch\/[^"?#\s>]+)"[^>]*title="([^"]+)"[\s\S]*?<img[^>]+(?:data-src|src)="([^"]+)"/gi;
                     let match;
                     const seenUrls = new Set();
-                    
-                    while ((match = linkRegex.exec(html)) !== null) {
+
+                    while ((match = fallbackRegex.exec(tempHtml)) !== null) {
                         const url = BASE_URL + match[1];
-                        if (seenUrls.has(url)) continue;
-
-                        const innerContent = match[2];
-                        
-                        // Extract title from title attribute or inner text
-                        const titleMatch = match[0].match(/title="([^"]+)"/);
-                        const title = titleMatch ? titleMatch[1].trim() : innerContent.replace(/<[^>]+>/g, '').trim();
-
-                        if (!title || title.length < 2 || title.includes("Episode")) continue;
-
-                        const imgMatch = innerContent.match(/data-src="([^"]+)"/) || innerContent.match(/src="([^"]+)"/);
-                        
-                        results.push({
-                            title: title,
-                            image: imgMatch ? imgMatch[1] : "",
-                            href: url
-                        });
-                        seenUrls.add(url);
+                        if (!seenUrls.has(url) && !match[2].toLowerCase().includes("episode")) {
+                            seenUrls.add(url);
+                            localResults.push({
+                                title: match[2].trim(),
+                                image: match[3],
+                                href: url
+                            });
+                        }
                     }
                 }
 
-                // If results are found, return them and break the loop immediately
-                if (results.length > 0) {
-                    return JSON.stringify(results);
+                // KEYWORD VALIDATION FILTER: Confirms that the page contains matching query data 
+                // to prevent false positives caused by homepage fallbacks.
+                if (localResults.length > 0) {
+                    const hasKeywordMatch = localResults.some(item => 
+                        item.title.toLowerCase().includes(cleanKeyword.toLowerCase())
+                    );
+                    
+                    if (hasKeywordMatch) {
+                        html = tempHtml;
+                        finalResults = localResults;
+                        break; // Correct search endpoint found, exit loop safely
+                    }
                 }
-
             } catch (e) {
-                // Ignore failure and continue to the next path
+                // Fail-silent traversal to next endpoint
             }
         }
 
-        // If loop finishes with 0 results, print the HTML structure to the screen
-        const cleanHtml = debugHtml.replace(/\s+/g, ' ').substring(0, 150);
+        // Return validated search array if verification passes
+        if (finalResults.length > 0) {
+            return JSON.stringify(finalResults);
+        }
+
+        // Final Debug fallback if the structure cannot be mapped
+        const cleanHtml = html ? html.replace(/\s+/g, ' ').substring(0, 120) : "No Response Content";
         return JSON.stringify([{
-            title: `DEBUG [No Results Found]: ${cleanHtml}...`, 
+            title: `DEBUG [Extraction Failure]: ${cleanHtml}...`, 
             image: "https://anineko.to/img/logo.png?v=4", 
             href: BASE_URL
         }]);
 
     } catch (error) {
-        return JSON.stringify([{ title: "Error Fetching", image: "", href: "" }]);
+        return JSON.stringify([{ title: "Execution Error", image: "", href: "" }]);
     }
 }
 
@@ -136,7 +150,7 @@ async function extractEpisodes(url) {
         const response = await fetch(url);
         const html = await response.text();
 
-        const epRegex = /href="(\/watch\/[^"]+\/ep-(\d+))"/g;
+        const epRegex = /href="(\/watch\/[^"'\s>]+\/ep-(\d+))"/g;
         const seen = new Set();
         const episodes = [];
         let match;

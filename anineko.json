@@ -5,13 +5,13 @@
        "name": "Shreyash",
        "icon": "https://anineko.to/img/logo.png?v=4"
    },
-   "version": "1.0.1",
+   "version": "1.0.2",
    "language": "English (SUB/DUB)",
    "streamType": "HLS",
    "quality": "1080p",
    "baseUrl": "https://anineko.to",
    "searchBaseUrl": "https://anineko.to/search?keyword=%s",
-   "scriptUrl": "https://raw.githubusercontent.com/shreyashreal/my-sora-modules/e87010e4cbad2bce1640534328046cb720e48c28/anineko.js",
+   "scriptUrl": "https://raw.githubusercontent.com/shreyashreal/my-sora-modules/refs/heads/main/anineko.js",
    "asyncJS": true,
    "type": "anime"
 }

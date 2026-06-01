@@ -1,7 +1,7 @@
 const BASE_URL = "https://anineko.to";
 
 // ─────────────────────────────────────────────
-// 1. SEARCH RESULTS
+// 1. SEARCH RESULTS (QA DEBUG MODE)
 // ─────────────────────────────────────────────
 async function searchResults(keyword) {
     try {
@@ -16,9 +16,7 @@ async function searchResults(keyword) {
         const cards = html.match(cardRegex) || [];
 
         for (const card of cards) {
-            // Get title and href from film-name link
             const hrefMatch = card.match(/href="(\/watch\/[^"?]+)"[^>]*>([^<]+)<\/a>/);
-            // Get cover image (data-src or src from cdn.cimovix.store)
             const imgMatch = card.match(/data-src="([^"]+cdn\.cimovix[^"]+)"|src="([^"]+cdn\.cimovix[^"]+)"/);
 
             if (hrefMatch) {
@@ -49,10 +47,22 @@ async function searchResults(keyword) {
             }
         }
 
+        // 🚨 QA DEBUGGER: If no results are found, print the HTML to the screen! 🚨
+        if (results.length === 0) {
+            // Clean up the HTML slightly so it fits in the title card
+            const cleanHtml = html.replace(/\s+/g, ' ').substring(0, 150);
+            
+            return JSON.stringify([{
+                title: `DEBUG: ${cleanHtml}...`, 
+                image: "https://anineko.to/img/logo.png?v=4", // Use default logo
+                href: BASE_URL
+            }]);
+        }
+
         return JSON.stringify(results);
     } catch (error) {
         console.log("searchResults error:", error);
-        return JSON.stringify([{ title: "Error", image: "", href: "" }]);
+        return JSON.stringify([{ title: "Error Fetching", image: "", href: "" }]);
     }
 }
 

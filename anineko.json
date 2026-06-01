@@ -2,7 +2,7 @@
    "sourceName": "AniNeko",
    "iconUrl": "https://anineko.to/img/logo.png?v=4",
    "author": {
-       "name": "YourName",
+       "name": "Shreyash",
        "icon": "https://anineko.to/img/logo.png?v=4"
    },
    "version": "1.0.0",
@@ -11,7 +11,7 @@
    "quality": "1080p",
    "baseUrl": "https://anineko.to",
    "searchBaseUrl": "https://anineko.to/search?keyword=%s",
-   "scriptUrl": "YOUR_HOSTED_URL/anineko.js",
+   "scriptUrl": "https://raw.githubusercontent.com/shreyashreal/my-sora-modules/refs/heads/main/anineko.js",
    "asyncJS": true,
    "type": "anime"
 }

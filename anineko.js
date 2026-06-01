@@ -1,26 +1,37 @@
 const BASE_URL = "https://anineko.to";
 
 // ─────────────────────────────────────────────
-// 1. SEARCH RESULTS (ROBUST PATTERN MATCHING)
+// 1. SEARCH RESULTS (SORA URL-PARSING IMMUNIZED)
 // ─────────────────────────────────────────────
-async function searchResults(keyword) {
+async function searchResults(inputParam) {
     try {
-        const cleanKeyword = keyword.trim();
+        let cleanKeyword = inputParam.trim();
+
+        // 🚨 SORA ENGINE FIX: If Sora passes the entire constructed URL instead of the raw keyword, extract the query term safely.
+        if (cleanKeyword.startsWith("http://") || cleanKeyword.startsWith("https://")) {
+            try {
+                const urlObject = new URL(cleanKeyword);
+                cleanKeyword = urlObject.searchParams.get("keyword") || urlObject.searchParams.get("s") || urlObject.searchParams.get("key") || cleanKeyword;
+                // If it extracted a path instead of a query, grab the last segment
+                if (cleanKeyword.includes("/")) {
+                    cleanKeyword = cleanKeyword.split("/").pop();
+                }
+            } catch (urlError) {
+                // Fallback to original text if parsing fails
+            }
+        }
+
         const encodedKeyword = encodeURIComponent(cleanKeyword);
         
-        // Comprehensive list of alternative routing structures for modern anime frameworks
+        // Multi-routing fallback array for layout structural shifts
         const searchPaths = [
             `/search?keyword=${encodedKeyword}`,
             `/search/?keyword=${encodedKeyword}`,
-            `/search?key=${encodedKeyword}`,
-            `/search?q=${encodedKeyword}`,
             `/filter?keyword=${encodedKeyword}`,
-            `/filter/?keyword=${encodedKeyword}`,
-            `/search-anime?keyword=${encodedKeyword}`,
             `/?s=${encodedKeyword}`
         ];
 
-        let html = "";
+        let debugHtml = "";
         let finalResults = [];
 
         for (const path of searchPaths) {
@@ -29,15 +40,16 @@ async function searchResults(keyword) {
                 if (!response.ok) continue;
                 
                 const tempHtml = await response.text();
-                
-                // Skip explicit error pages immediately
+                if (!debugHtml) debugHtml = tempHtml; 
+
+                // Skip explicit 404 documents
                 if (tempHtml.includes("Page Not Found") || tempHtml.includes("404 Error")) {
                     continue;
                 }
 
                 const localResults = [];
                 
-                // Non-rigid card scanning: extracts data blocks from the start of an item up to its title closing tag
+                // Matches standard structural anime card blocks cleanly
                 const blockRegex = /<div[^>]*class="[^"]*flw-item[^"]*"[\s\S]*?<\/h3>/gi;
                 const blocks = tempHtml.match(blockRegex) || [];
 
@@ -55,9 +67,9 @@ async function searchResults(keyword) {
                     }
                 }
 
-                // Broad Fallback Scraper: parses any valid media anchors if custom structural grid classes are absent
+                // Broad general grid fallback parser
                 if (localResults.length === 0) {
-                    const fallbackRegex = /<a[^>]+href="(\/watch\/[^"?#\s>]+)"[^>]*title="([^"]+)"[\s\S]*?<img[^>]+(?:data-src|src)="([^"]+)"/gi;
+                    const fallbackRegex = /<a[^>]+href="(\/watch\/[^"?#\s>]+)"[^>]*title="([^"]+)"[\s\S]*?<img[^>]+(data-src|src)="([^"]+)"/gi;
                     let match;
                     const seenUrls = new Set();
 
@@ -67,15 +79,14 @@ async function searchResults(keyword) {
                             seenUrls.add(url);
                             localResults.push({
                                 title: match[2].trim(),
-                                image: match[3],
+                                image: match[4],
                                 href: url
                             });
                         }
                     }
                 }
 
-                // KEYWORD VALIDATION FILTER: Confirms that the page contains matching query data 
-                // to prevent false positives caused by homepage fallbacks.
+                // Validate that the output content actually belongs to the query array
                 if (localResults.length > 0) {
                     const hasKeywordMatch = localResults.some(item => 
                         item.title.toLowerCase().includes(cleanKeyword.toLowerCase())
@@ -84,23 +95,21 @@ async function searchResults(keyword) {
                     if (hasKeywordMatch) {
                         html = tempHtml;
                         finalResults = localResults;
-                        break; // Correct search endpoint found, exit loop safely
+                        break; 
                     }
                 }
             } catch (e) {
-                // Fail-silent traversal to next endpoint
+                // Continue structural loop traversal
             }
         }
 
-        // Return validated search array if verification passes
         if (finalResults.length > 0) {
             return JSON.stringify(finalResults);
         }
 
-        // Final Debug fallback if the structure cannot be mapped
-        const cleanHtml = html ? html.replace(/\s+/g, ' ').substring(0, 120) : "No Response Content";
+        const cleanHtml = debugHtml ? debugHtml.replace(/\s+/g, ' ').substring(0, 100) : "No Server Connection";
         return JSON.stringify([{
-            title: `DEBUG [Extraction Failure]: ${cleanHtml}...`, 
+            title: `DEBUG [No Results For: ${cleanKeyword}]: ${cleanHtml}...`, 
             image: "https://anineko.to/img/logo.png?v=4", 
             href: BASE_URL
         }]);

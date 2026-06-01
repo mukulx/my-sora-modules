@@ -1,13 +1,47 @@
 const BASE_URL = "https://anineko.to";
 
 // ─────────────────────────────────────────────
-// 1. SEARCH RESULTS (QA DEBUG MODE)
+// 1. SEARCH RESULTS (MULTI-ENDPOINT & DEBUG)
 // ─────────────────────────────────────────────
 async function searchResults(keyword) {
     try {
         const encodedKeyword = encodeURIComponent(keyword);
-        const response = await fetch(`${BASE_URL}/search?keyword=${encodedKeyword}`);
-        const html = await response.text();
+        
+        // Test array for the most common anime site search paths
+        const searchPaths = [
+            `/?s=${encodedKeyword}`,
+            `/filter?keyword=${encodedKeyword}`,
+            `/search.html?keyword=${encodedKeyword}`,
+            `/search.html?s=${encodedKeyword}`
+        ];
+
+        let html = "";
+        let successfulPath = "";
+        
+        for (const path of searchPaths) {
+            try {
+                const response = await fetch(BASE_URL + path);
+                if (response.ok) {
+                    const tempHtml = await response.text();
+                    // Verify it didn't just load the 404 page
+                    if (!tempHtml.includes("Page Not Found") && !tempHtml.includes("404 Error")) {
+                        html = tempHtml;
+                        successfulPath = path;
+                        break; 
+                    }
+                }
+            } catch (e) {
+                // Ignore fetch errors for incorrect paths and continue loop
+            }
+        }
+
+        if (!html) {
+             return JSON.stringify([{
+                title: "DEBUG: All tested search endpoints returned 404. Manual URL verification required.", 
+                image: "https://anineko.to/img/logo.png?v=4", 
+                href: BASE_URL
+            }]);
+        }
 
         const results = [];
 
@@ -47,14 +81,12 @@ async function searchResults(keyword) {
             }
         }
 
-        // 🚨 QA DEBUGGER: If no results are found, print the HTML to the screen! 🚨
+        // QA DEBUGGER
         if (results.length === 0) {
-            // Clean up the HTML slightly so it fits in the title card
             const cleanHtml = html.replace(/\s+/g, ' ').substring(0, 150);
-            
             return JSON.stringify([{
-                title: `DEBUG: ${cleanHtml}...`, 
-                image: "https://anineko.to/img/logo.png?v=4", // Use default logo
+                title: `DEBUG [Path: ${successfulPath}]: ${cleanHtml}...`, 
+                image: "https://anineko.to/img/logo.png?v=4", 
                 href: BASE_URL
             }]);
         }

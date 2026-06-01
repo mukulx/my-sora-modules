@@ -1,0 +1,17 @@
+{
+   "sourceName": "AniNeko",
+   "iconUrl": "https://anineko.to/img/logo.png?v=4",
+   "author": {
+       "name": "YourName",
+       "icon": "https://anineko.to/img/logo.png?v=4"
+   },
+   "version": "1.0.0",
+   "language": "English (SUB/DUB)",
+   "streamType": "HLS",
+   "quality": "1080p",
+   "baseUrl": "https://anineko.to",
+   "searchBaseUrl": "https://anineko.to/search?keyword=%s",
+   "scriptUrl": "YOUR_HOSTED_URL/anineko.js",
+   "asyncJS": true,
+   "type": "anime"
+}

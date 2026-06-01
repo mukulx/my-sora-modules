@@ -1,99 +1,97 @@
 const BASE_URL = "https://anineko.to";
 
 // ─────────────────────────────────────────────
-// 1. SEARCH RESULTS (MULTI-ENDPOINT & DEBUG)
+// 1. SEARCH RESULTS 
 // ─────────────────────────────────────────────
 async function searchResults(keyword) {
     try {
         const encodedKeyword = encodeURIComponent(keyword);
         
-        // Test array for the most common anime site search paths
+        // Test all possible search endpoints
         const searchPaths = [
-            `/?s=${encodedKeyword}`,
-            `/filter?keyword=${encodedKeyword}`,
+            `/search?keyword=${encodedKeyword}`, 
+            `/filter?keyword=${encodedKeyword}`, 
             `/search.html?keyword=${encodedKeyword}`,
-            `/search.html?s=${encodedKeyword}`
+            `/?s=${encodedKeyword}`
         ];
 
-        let html = "";
-        let successfulPath = "";
-        
+        let debugHtml = "";
+
         for (const path of searchPaths) {
             try {
                 const response = await fetch(BASE_URL + path);
-                if (response.ok) {
-                    const tempHtml = await response.text();
-                    // Verify it didn't just load the 404 page
-                    if (!tempHtml.includes("Page Not Found") && !tempHtml.includes("404 Error")) {
-                        html = tempHtml;
-                        successfulPath = path;
-                        break; 
+                if (!response.ok) continue;
+                
+                const html = await response.text();
+                if (!debugHtml) debugHtml = html; // Store first valid response for debugging
+                
+                const results = [];
+
+                // Method 1: Relaxed Card Regex (ignores strict CDN requirements)
+                const cardRegex = /<div[^>]*class="[^"]*flw-item[^"]*"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/gi;
+                const cards = html.match(cardRegex) || [];
+
+                for (const card of cards) {
+                    const hrefMatch = card.match(/href="(\/watch\/[^"?]+)"[^>]*>([^<]+)<\/a>/);
+                    const imgMatch = card.match(/data-src="([^"]+)"/) || card.match(/src="([^"]+)"/);
+
+                    if (hrefMatch) {
+                        results.push({
+                            title: hrefMatch[2].trim(),
+                            image: imgMatch ? imgMatch[1] : "",
+                            href: BASE_URL + hrefMatch[1]
+                        });
                     }
                 }
+
+                // Method 2: Fallback broad link scraping if cards fail
+                if (results.length === 0) {
+                    const linkRegex = /<a[^>]+href="(\/watch\/[^"?]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+                    let match;
+                    const seenUrls = new Set();
+                    
+                    while ((match = linkRegex.exec(html)) !== null) {
+                        const url = BASE_URL + match[1];
+                        if (seenUrls.has(url)) continue;
+
+                        const innerContent = match[2];
+                        
+                        // Extract title from title attribute or inner text
+                        const titleMatch = match[0].match(/title="([^"]+)"/);
+                        const title = titleMatch ? titleMatch[1].trim() : innerContent.replace(/<[^>]+>/g, '').trim();
+
+                        if (!title || title.length < 2 || title.includes("Episode")) continue;
+
+                        const imgMatch = innerContent.match(/data-src="([^"]+)"/) || innerContent.match(/src="([^"]+)"/);
+                        
+                        results.push({
+                            title: title,
+                            image: imgMatch ? imgMatch[1] : "",
+                            href: url
+                        });
+                        seenUrls.add(url);
+                    }
+                }
+
+                // If results are found, return them and break the loop immediately
+                if (results.length > 0) {
+                    return JSON.stringify(results);
+                }
+
             } catch (e) {
-                // Ignore fetch errors for incorrect paths and continue loop
+                // Ignore failure and continue to the next path
             }
         }
 
-        if (!html) {
-             return JSON.stringify([{
-                title: "DEBUG: All tested search endpoints returned 404. Manual URL verification required.", 
-                image: "https://anineko.to/img/logo.png?v=4", 
-                href: BASE_URL
-            }]);
-        }
+        // If loop finishes with 0 results, print the HTML structure to the screen
+        const cleanHtml = debugHtml.replace(/\s+/g, ' ').substring(0, 150);
+        return JSON.stringify([{
+            title: `DEBUG [No Results Found]: ${cleanHtml}...`, 
+            image: "https://anineko.to/img/logo.png?v=4", 
+            href: BASE_URL
+        }]);
 
-        const results = [];
-
-        // Match all anime cards (each film item block)
-        const cardRegex = /<div class="flw-item"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/g;
-        const cards = html.match(cardRegex) || [];
-
-        for (const card of cards) {
-            const hrefMatch = card.match(/href="(\/watch\/[^"?]+)"[^>]*>([^<]+)<\/a>/);
-            const imgMatch = card.match(/data-src="([^"]+cdn\.cimovix[^"]+)"|src="([^"]+cdn\.cimovix[^"]+)"/);
-
-            if (hrefMatch) {
-                results.push({
-                    title: hrefMatch[2].trim(),
-                    image: imgMatch ? (imgMatch[1] || imgMatch[2]) : "",
-                    href: BASE_URL + hrefMatch[1]
-                });
-            }
-        }
-
-        // Fallback: try simpler link pattern if card regex fails
-        if (results.length === 0) {
-            const linkRegex = /href="(\/watch\/[^"?\/]+)"[^>]*title="([^"]+)"/g;
-            const imgRegex = /data-src="(https:\/\/cdn\.cimovix[^"]+)"/g;
-            const imgs = [];
-            let m;
-            while ((m = imgRegex.exec(html)) !== null) imgs.push(m[1]);
-
-            let i = 0;
-            while ((m = linkRegex.exec(html)) !== null) {
-                results.push({
-                    title: m[2].trim(),
-                    image: imgs[i] || "",
-                    href: BASE_URL + m[1]
-                });
-                i++;
-            }
-        }
-
-        // QA DEBUGGER
-        if (results.length === 0) {
-            const cleanHtml = html.replace(/\s+/g, ' ').substring(0, 150);
-            return JSON.stringify([{
-                title: `DEBUG [Path: ${successfulPath}]: ${cleanHtml}...`, 
-                image: "https://anineko.to/img/logo.png?v=4", 
-                href: BASE_URL
-            }]);
-        }
-
-        return JSON.stringify(results);
     } catch (error) {
-        console.log("searchResults error:", error);
         return JSON.stringify([{ title: "Error Fetching", image: "", href: "" }]);
     }
 }
@@ -106,7 +104,6 @@ async function extractDetails(url) {
         const response = await fetch(url);
         const html = await response.text();
 
-        // Description — try multiple selectors
         let description = "";
         const descMatch =
             html.match(/<div[^>]*class="[^"]*description[^"]*"[^>]*>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/) ||
@@ -116,12 +113,10 @@ async function extractDetails(url) {
             description = descMatch[1].replace(/<[^>]+>/g, "").trim();
         }
 
-        // Aliases (alternative title if present)
         let aliases = "";
         const aliasMatch = html.match(/(?:Other Names?|Synonyms?)[^>]*>[\s]*<span[^>]*>(.*?)<\/span>/i);
         if (aliasMatch) aliases = aliasMatch[1].replace(/<[^>]+>/g, "").trim();
 
-        // Air date / year
         let airdate = "";
         const yearMatch = html.match(/(?:Aired|Released?|Year)[^>]*>[\s]*<span[^>]*>(.*?)<\/span>/i) ||
                           html.match(/<time[^>]*datetime="(\d{4})/);
@@ -129,7 +124,6 @@ async function extractDetails(url) {
 
         return JSON.stringify([{ description, aliases, airdate }]);
     } catch (error) {
-        console.log("extractDetails error:", error);
         return JSON.stringify([{ description: "Error loading details", aliases: "", airdate: "" }]);
     }
 }
@@ -142,7 +136,6 @@ async function extractEpisodes(url) {
         const response = await fetch(url);
         const html = await response.text();
 
-        // Match all episode links: /watch/slug/ep-N
         const epRegex = /href="(\/watch\/[^"]+\/ep-(\d+))"/g;
         const seen = new Set();
         const episodes = [];
@@ -157,12 +150,9 @@ async function extractEpisodes(url) {
             }
         }
 
-        // Sort by episode number ascending
         episodes.sort((a, b) => a.number - b.number);
-
         return JSON.stringify(episodes);
     } catch (error) {
-        console.log("extractEpisodes error:", error);
         return JSON.stringify([]);
     }
 }
@@ -175,30 +165,24 @@ async function extractStreamUrl(url) {
         const response = await fetch(url);
         const html = await response.text();
 
-        // Priority 1: direct m3u8 stream in a script variable
         const m3u8Match =
             html.match(/["']?(https?:\/\/[^"'\s]+\.m3u8[^"'\s]*)["']?/) ||
             html.match(/file:\s*["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/);
         if (m3u8Match) return m3u8Match[1];
 
-        // Priority 2: mp4 direct source
         const mp4Match = html.match(/["'](https?:\/\/[^"'\s]+\.mp4[^"'\s]*)["']/);
         if (mp4Match) return mp4Match[1];
 
-        // Priority 3: iframe embed src
         const iframeMatch =
             html.match(/<iframe[^>]+src="(https?:\/\/[^"]+)"/) ||
             html.match(/data-src="(https?:\/\/[^"]+player[^"]+)"/i);
         if (iframeMatch) return iframeMatch[1];
 
-        // Priority 4: try to find an API endpoint for HD-1 server
-        // Extract slug and episode number from the URL
         const epMatch = url.match(/\/watch\/([^\/]+)\/ep-(\d+)/);
         if (epMatch) {
             const slug = epMatch[1];
             const ep = epMatch[2];
 
-            // Try common API patterns for this type of site
             const apiAttempts = [
                 `${BASE_URL}/api/episode/sources?anime=${slug}&ep=${ep}&type=sub`,
                 `${BASE_URL}/api/v1/sources?slug=${slug}&ep=${ep}`,
@@ -217,7 +201,6 @@ async function extractStreamUrl(url) {
 
         return null;
     } catch (error) {
-        console.log("extractStreamUrl error:", error);
         return null;
     }
 }

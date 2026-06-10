@@ -48,6 +48,7 @@ async function searchResults(inputParam) {
                 }
 
                 const localResults = [];
+                const seenUrls = new Set();
                 
                 // Matches standard structural anime card blocks cleanly
                 const blockRegex = /<div[^>]*class="[^"]*flw-item[^"]*"[\s\S]*?<\/h3>/gi;
@@ -59,11 +60,15 @@ async function searchResults(inputParam) {
                     const imgMatch = block.match(/(?:data-src|src)="([^"]+)"/i);
 
                     if (hrefMatch && titleMatch) {
-                        localResults.push({
-                            title: titleMatch[1].trim(),
-                            image: imgMatch ? imgMatch[1] : "",
-                            href: BASE_URL + hrefMatch[1]
-                        });
+                        const url = BASE_URL + hrefMatch[1];
+                        if (!seenUrls.has(url)) {
+                            seenUrls.add(url);
+                            localResults.push({
+                                title: titleMatch[1].trim(),
+                                image: imgMatch ? imgMatch[1] : "",
+                                href: url
+                            });
+                        }
                     }
                 }
 
@@ -71,7 +76,6 @@ async function searchResults(inputParam) {
                 if (localResults.length === 0) {
                     const fallbackRegex = /<a[^>]+href="(\/watch\/[^"?#\s>]+)"[^>]*title="([^"]+)"[\s\S]*?<img[^>]+(data-src|src)="([^"]+)"/gi;
                     let match;
-                    const seenUrls = new Set();
 
                     while ((match = fallbackRegex.exec(tempHtml)) !== null) {
                         const url = BASE_URL + match[1];
@@ -88,12 +92,13 @@ async function searchResults(inputParam) {
 
                 // Validate that the output content actually belongs to the query array
                 if (localResults.length > 0) {
+                    const lowerKeyword = cleanKeyword.toLowerCase();
                     const hasKeywordMatch = localResults.some(item => 
-                        item.title.toLowerCase().includes(cleanKeyword.toLowerCase())
+                        item.title.toLowerCase().includes(lowerKeyword)
                     );
                     
                     if (hasKeywordMatch) {
-                        html = tempHtml;
+                        debugHtml = tempHtml;
                         finalResults = localResults;
                         break; 
                     }
@@ -115,7 +120,11 @@ async function searchResults(inputParam) {
         }]);
 
     } catch (error) {
-        return JSON.stringify([{ title: "Execution Error", image: "", href: "" }]);
+        return JSON.stringify([{ 
+            title: `Execution Error: ${error.message}`, 
+            image: "https://anineko.to/img/logo.png?v=4", 
+            href: BASE_URL 
+        }]);
     }
 }
 
@@ -125,6 +134,9 @@ async function searchResults(inputParam) {
 async function extractDetails(url) {
     try {
         const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         const html = await response.text();
 
         let description = "";
@@ -157,6 +169,9 @@ async function extractDetails(url) {
 async function extractEpisodes(url) {
     try {
         const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         const html = await response.text();
 
         const epRegex = /href="(\/watch\/[^"'\s>]+\/ep-(\d+))"/g;
@@ -186,6 +201,9 @@ async function extractEpisodes(url) {
 async function extractStreamUrl(url) {
     try {
         const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         const html = await response.text();
 
         const m3u8Match =
